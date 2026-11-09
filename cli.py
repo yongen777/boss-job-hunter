@@ -420,6 +420,8 @@ def cmd_probe(args) -> int:
             say("")
             warn(f"{len(zero)} 个分组一个都没命中：{'、'.join(sorted(zero))}")
             say("    页面改版了的话，用下面的 classTop 找新特征，改 extension/selectors.js")
+            if data.get("readyState") and data["readyState"] != "complete":
+                say(f"    另外：readyState 不是 complete（当前 {data['readyState']}），页面还没加载完 —— 等两秒再测一次")
     top = data.get("classTop") or []
     if top and args.classes:
         say("")
