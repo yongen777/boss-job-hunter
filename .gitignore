@@ -1,0 +1,18 @@
+# 数据目录：浏览器登录态、简历原件、台账，全部不进版本库
+data/
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+vendor/
+.idea/
+.vscode/
+dist/
+build/
+
+# 桥的运行时产物
+*.log
+bridge.log

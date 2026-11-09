@@ -1,0 +1,83 @@
+{
+  "bridge": {
+    "host": "127.0.0.1",
+    "port": 8898,
+    "poll_wait_sec": 25,
+    "cmd_timeout_sec": 90
+  },
+  "browser": {
+    "kind": "edge",
+    "executable": "",
+    "profile_dir": "data/browser-profile",
+    "extra_args": []
+  },
+  "candidate": {
+    "name": "张伟",
+    "phone": "13812345678",
+    "email": "zhangwei@example.com",
+    "years_experience": 5,
+    "education": "本科",
+    "current_city": "上海",
+    "available_from": "一个月内",
+    "target_roles": [
+      "Java 后端",
+      "后端开发工程师"
+    ],
+    "cities": [
+      "上海",
+      "杭州"
+    ],
+    "salary_min_k": 25,
+    "salary_max_k": 40,
+    "must_have": [],
+    "nice_to_have": [],
+    "blacklist_companies": [],
+    "blacklist_keywords": [
+      "外包",
+      "劳务派遣",
+      "驻场",
+      "人力外包"
+    ],
+    "avoid_keywords": [
+      "销售",
+      "地推",
+      "电话销售"
+    ]
+  },
+  "matching": {
+    "min_score_to_apply": 70,
+    "weights": {
+      "skill_coverage": 40,
+      "experience_fit": 20,
+      "salary_fit": 15,
+      "city_fit": 10,
+      "education_fit": 5,
+      "company_quality": 10
+    },
+    "hard_reject_on_blacklist": true
+  },
+  "greeting": {
+    "max_chars": 150,
+    "style": "真诚、具体、不谄媚",
+    "must_mention": [
+      "匹配的核心技能",
+      "相关项目经验"
+    ],
+    "forbidden": [
+      "贵公司",
+      "您好我是",
+      "期待您的回复",
+      "麻烦您了"
+    ],
+    "use_candidate_name": false
+  },
+  "safety": {
+    "mode": "confirm",
+    "daily_send_limit": 20,
+    "min_interval_sec": 18,
+    "cooldown_after_minutes": 45,
+    "cooldown_minutes": 20,
+    "stop_on_captcha": true,
+    "stop_on_code_37": true
+  }
+}
