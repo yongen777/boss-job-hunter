@@ -141,6 +141,22 @@ python cli.py ledger
 - agent 可以在 `python cli.py draft --json` 之后改写草稿，再 `python cli.py apply`。
 - agent 应定期 `python cli.py ledger` 看账本状态，及时察觉新消息和未确认投递。
 
+## 报错了怎么办（错误码）
+
+CLI 会把扩展给的错误码原样带出来，形如 `采集失败（layout-changed）：…`。看括号里那个词就知道该干什么：
+
+| 错误码 | 意思 | 你该做什么 |
+|---|---|---|
+| `layout-changed` | 页面上找不到控件，站点改版了 | **别重试**。跑 `python cli.py probe --classes --text` 看现场 → 改 `extension/selectors.js` 对应分组 → 重新自检 |
+| `not-ready` | 页面还在加载 | 等两三秒重跑同一条命令，通常自己就好 |
+| `captcha` / `login` / `risk` | 验证码、掉登录、风控拦了 | 停手，等人到浏览器里处理。继续试只会把冷却拖长 |
+| `not-paired` / 扩展没连上 | 桥在跑但没有扩展配对 | 让人去 `edge://extensions` 加载 `extension` 目录，弹窗里贴 `data/.bridge-token` |
+| `no-button` | 这个岗位没有「立即沟通」按钮 | 跳过这一条，不是故障 |
+
+`probe` 和 `state.get` 故意不受版式自检拦截 —— 版式坏掉的时候，你得还能用探针看现场。
+
+纪律：**退出码非 0 就是真有东西坏了**，不要当噪音忽略；`[!]` 开头的才是提醒。
+
 ## 踩坑与对策
 
 详见 `README.md` 中的「风控与合规」章节。核心几条：
