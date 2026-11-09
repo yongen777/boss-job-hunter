@@ -15,8 +15,11 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import time
+import urllib.request
 from pathlib import Path
 
 from . import config as cfgmod
@@ -114,8 +117,81 @@ def build_command(cfg: dict | None = None) -> tuple[str, list[str]]:
     return exe, args
 
 
-def launch(cfg: dict | None = None, *, dry_run: bool = False) -> dict:
-    """起浏览器。返回 {ok, exe, profile, extension, command, pid?, dry_run?}。"""
+def find_extension_id(profile_dir: Path, ext_dir: Path) -> str | None:
+    """从 profile 的注册表里反查这个扩展目录的扩展 id。
+
+    清单里没写 `key`，id 是按扩展目录路径算出来的；从命令行 --load-extension
+    加载的扩展（location=8）只登记在 `Secure Preferences` 里，不在 `Preferences`。
+    """
+    target = str(ext_dir).lower()
+    for name in ("Secure Preferences", "Preferences"):
+        pref = Path(profile_dir) / "Default" / name
+        if not pref.exists():
+            continue
+        try:
+            data = json.loads(pref.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        settings = ((data.get("extensions") or {}).get("settings") or {})
+        for eid, entry in settings.items():
+            known = str((entry or {}).get("path") or "").lower()
+            if known and known == target:
+                return eid
+    return None
+
+
+def read_token() -> str:
+    """读桥的配对码（桥首次启动会生成）。没有就返回空串。"""
+    try:
+        return cfgmod.TOKEN_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def wait_paired(
+    info: dict,
+    cfg: dict | None = None,
+    *,
+    wait_sec: float = 20.0,
+) -> dict:
+    """等扩展自己连上桥。
+
+    配对码不用手填了：扩展一醒过来发现 storage 里没有 token，就会去
+    `GET /api/token` 领一个（桥只放行空 Origin 和 chrome-extension://，
+    网页里 fetch 带的 Origin 会被 403 掉）。所以这里只管等，不再往
+    profile 里塞东西 —— 命令行开 chrome-extension:// 页面会被新版
+    Chromium 直接拒掉，那条路走不通。
+    """
+    cfg = cfg or cfgmod.load_config()
+    token = read_token()
+    if not token:
+        return {"ok": False, "connected": False, "code": "no-token",
+                "reason": f"没找到配对码 {cfgmod.TOKEN_PATH}（桥启动过吗？）"}
+
+    eid = find_extension_id(Path(info["profile"]), Path(info["extension"]))
+    deadline = time.time() + wait_sec
+    last = ""
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(
+                cfgmod.bridge_url(cfg).rstrip("/") + "/api/health",
+                headers={"X-Bridge-Auth": token},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            ext = data.get("extension") or {}
+            if ext.get("connected"):
+                return {"ok": True, "connected": True, "extId": ext.get("id") or eid}
+            last = "桥在跑，但扩展还没来要指令"
+        except OSError as exc:
+            last = f"连不上桥：{exc}"
+        time.sleep(0.5)
+    return {"ok": False, "connected": False, "extId": eid,
+            "code": "not-connected", "reason": last or "等超时了"}
+
+
+def launch(cfg: dict | None = None, *, dry_run: bool = False, pair: bool = True) -> dict:
+    """起浏览器。返回 {ok, exe, profile, extension, command, pid?, dry_run?, pair?}。"""
     cfg = cfg or cfgmod.load_config()
     exe, args = build_command(cfg)
     br = cfg.get("browser", {})
@@ -132,6 +208,8 @@ def launch(cfg: dict | None = None, *, dry_run: bool = False) -> dict:
         return info
     proc = subprocess.Popen([exe] + args, close_fds=True)
     info["pid"] = proc.pid
+    if pair:
+        info["pair"] = wait_paired(info, cfg)
     return info
 
 
@@ -144,8 +222,9 @@ def main(argv=None) -> int:
             pass
 
     dry = "--dry-run" in argv or "--print" in argv
+    pair = "--no-pair" not in argv
     cfgmod.ensure_dirs()
-    info = launch(dry_run=dry)
+    info = launch(dry_run=dry, pair=pair)
 
     print("启动浏览器")
     print(f"  程序   {info['exe']}")
@@ -158,12 +237,25 @@ def main(argv=None) -> int:
         print("  " + info["command"])
         return 0
     print(f"已启动，pid {info['pid']}")
+    paired = info.get("pair") or {}
+    if not pair:
+        print("  （--no-pair：没等扩展连上来）")
+    elif paired.get("ok"):
+        print(f"  [ok] 扩展已连上桥（id {paired.get('extId') or '未知'}），配对码它自己领的")
+    else:
+        print(f"  [!] 扩展还没连上：{paired.get('reason') or paired.get('code')}")
+        print("      多半是扩展还没装进这个 profile，按下面第 2 步加载一下，")
+        print("      加载完它会自己来领配对码，不用手填。")
     print()
     print("接下来：")
     print("  1) 这个新窗口里登录 BOSS直聘（zhipin.com），扫码或账号密码都行")
     print("  2) 地址栏开 edge://extensions ，看「BOSS直聘求职猎手」在不在")
     print("     不在的话：打开右上角「开发人员模式」→「加载解压缩的扩展」→ 选上面那个扩展目录")
-    print("  3) 点扩展图标，把 data/.bridge-token 里的配对码粘进去，点「保存并连接」")
+    if paired.get("ok"):
+        print("  3) 配对已经通了，这步跳过")
+    else:
+        print("  3) 扩展加载好之后等几秒，它会自己连桥；一直不通就点扩展图标，")
+        print("     把 data/.bridge-token 里的配对码粘进去，点「保存并连接」")
     print("  4) 回到命令行跑  python cli.py doctor")
     return 0
 

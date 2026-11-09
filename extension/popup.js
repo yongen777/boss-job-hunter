@@ -68,5 +68,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.status || changes.log) load();
 });
 
-load();
+/* 自动配对：huntsman/browser.py 会把配对码挂在 URL 上打开这个页面
+   （popup.html?token=xxx），一加载就存好并连上，不用再手填。
+   存完立刻把配对码从地址栏抹掉，免得留在历史里。 */
+async function pairFromUrl() {
+  const q = new URLSearchParams(location.search);
+  const token = (q.get('token') || '').trim();
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(token)) return false;
+  const bridgeUrl = (q.get('bridge') || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:8898';
+  await chrome.storage.local.set({ bridgeUrl, token, enabled: true });
+  history.replaceState(null, '', location.pathname);
+  $('text').textContent = '已自动配对，正在连接…';
+  chrome.runtime.sendMessage({ type: 'popup.start' });
+  return true;
+}
+
+pairFromUrl().catch(() => {}).finally(load);
 setInterval(load, 2000);

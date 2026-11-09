@@ -270,6 +270,15 @@ def _make_handler(bridge, token, quiet):
                     return
                 self._send(200, bridge.health())
                 return
+            if path == "/api/token":
+                # 扩展自己来领配对码（省掉在弹窗里手填那一步）。
+                # 故意不校验 X-Bridge-Auth —— 要的就是「还没有 token」的时候能拿到它。
+                # 网页里的 fetch 一定带 Origin，会被 _origin_ok 挡掉，不给站点留口子。
+                if not self._origin_ok():
+                    self._send(403, {"ok": False, "error": "origin 不被允许"})
+                    return
+                self._send(200, {"ok": True, "token": token})
+                return
             if path == "/api/result":
                 if not self._guard():
                     return

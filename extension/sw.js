@@ -161,6 +161,23 @@ async function reportResult(base, token, id, result) {
   }
 }
 
+/* 自动领取配对码：桥只放行「空 Origin」和 chrome-extension:// 两种来源，
+   网页里的 fetch 必带 Origin，会被桥 403 掉，所以这条路不给站点留口子。 */
+async function claimToken(base) {
+  try {
+    const r = await fetch(`${base}/api/token`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const token = (j && j.token) || '';
+    if (!/^[A-Za-z0-9_-]{16,}$/.test(token)) return null;
+    await chrome.storage.local.set({ bridgeUrl: base, token, enabled: true });
+    await logLine('info', '已从桥领到配对码');
+    return token;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function pollLoop() {
   if (looping) return;
   looping = true;
@@ -168,6 +185,10 @@ async function pollLoop() {
   while (looping) {
     const c = await cfg();
     if (!c.enabled || !c.token) {
+      if (c.enabled && !c.token) {
+        // 没配对码时先去桥那儿领一个，领到就接着走正常流程
+        if (await claimToken(c.bridgeUrl)) continue;
+      }
       await setStatus({ ok: false, text: c.token ? '已暂停' : '还没填 token' });
       await sleep(3000);
       continue;
